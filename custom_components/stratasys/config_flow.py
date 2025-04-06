@@ -1,8 +1,8 @@
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
-
 from .const import DOMAIN
+
+DEFAULT_SCAN_INTERVAL = 30  # seconds
 
 class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
@@ -21,6 +21,7 @@ class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("host"): str,
                 vol.Required("port", default=53742): int,
+                vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL): vol.All(int, vol.Range(min=5, max=600)),
             }),
             errors=errors
         )
