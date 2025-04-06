@@ -1,0 +1,8 @@
+{
+  "domain": "stratasys",
+  "name": "3D Printer Integration",
+  "version": "1.0.0",
+  "requirements": [],
+  "codeowners": ["@bnevets27"],
+  "iot_class": "local_polling"
+}
