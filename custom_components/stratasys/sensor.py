@@ -78,11 +78,12 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self):
         """Return device info."""
+        model = self.coordinator.data.get("general", {}).get("modelerType", "Unknown Model")
         return {
             "identifiers": {(DOMAIN, "stratasys_printer")},
             "name": "Stratasys 3D Printer",
             "manufacturer": "Stratasys",
-            "model": "Unknown Model",
+            "model": model,
         }
 
 # Example Sensor Classes (for all your fields)
