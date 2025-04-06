@@ -253,20 +253,25 @@ class StratasysMonitor:
                 raise
 
     async def connect(self) -> None:
-        """Establish connection and discover endpoints."""
-        try:
-            if not self.sock:
-                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.sock.settimeout(self.config.timeout)
-                self.sock.connect((self.config.host, self.config.port))
-                self.connected = True
-                self.logger.info(f"Successfully connected to printer at {self.config.host}:{self.config.port}")
-            else:
-                raise ConnectionError("Socket already connected")
-                
-        except Exception as e:
-            self.connected = False
-            raise ConnectionError(f"Failed to connect: {str(e)}")
+    """Establish connection to the printer."""
+    try:
+        if self.sock:
+            # Always close any existing socket first
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(self.config.timeout)
+        self.sock.connect((self.config.host, self.config.port))
+        self.connected = True
+        self.logger.info(f"Successfully connected to printer at {self.config.host}:{self.config.port}")
+
+    except Exception as e:
+        self.connected = False
+        raise ConnectionError(f"Failed to connect: {str(e)}")
 
     def cleanup(self):
         """Clean up resources."""
@@ -278,3 +283,4 @@ class StratasysMonitor:
             self.sock = None
         self.connected = False
         self.logger.info("Monitor stopped")
+
