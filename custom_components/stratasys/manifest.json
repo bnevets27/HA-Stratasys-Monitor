@@ -1,7 +1,7 @@
 {
   "domain": "stratasys",
   "name": "Stratasys 3D Printer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "documentation": "https://github.com/bnevets27/HA-Stratasys-Monitor",
   "issue_tracker": "https://github.com/bnevets27/HA-Stratasys-Monitor/issues",
   "requirements": [],
