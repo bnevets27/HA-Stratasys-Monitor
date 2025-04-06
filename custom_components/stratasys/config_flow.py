@@ -1,7 +1,9 @@
 """Config flow for Stratasys Printer integration."""
+
 import voluptuous as vol
 from homeassistant import config_entries
 from .const import DOMAIN
+from .options_flow import StratasysOptionsFlowHandler
 
 DEFAULT_SCAN_INTERVAL = 30  # Default polling interval in seconds
 
@@ -15,13 +17,11 @@ class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Once user submits the form, create the config entry
             return self.async_create_entry(
                 title=user_input["host"],
                 data=user_input,
             )
 
-        # Show the config form
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
@@ -31,3 +31,7 @@ class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
         )
+
+async def async_get_options_flow(config_entry):
+    """Get the options flow for this handler."""
+    return StratasysOptionsFlowHandler(config_entry)
