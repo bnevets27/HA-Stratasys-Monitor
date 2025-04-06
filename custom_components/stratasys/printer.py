@@ -58,19 +58,18 @@ class StratasysMonitor:
         self._setup_logging()
 
     def _setup_logging(self) -> None:
-        """Configure logging with rotation and proper formatting."""
-        log_path = Path('/config/logs')
-        log_path.mkdir(parents=True, exist_ok=True)
-
-        logging.basicConfig(
-            level=self.config.log_level,
-            format='%(asctime)s - %(levelname)s - [%(name)s] - %(message)s',
-            handlers=[
-                logging.FileHandler(log_path / 'stratasys_monitor.log'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
+        """Configure logging for Home Assistant."""
         self.logger = logging.getLogger('StratasysMonitor')
+        self.logger.setLevel(self.config.log_level)
+    
+        # Only use StreamHandler (no FileHandler!)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'
+        ))
+    
+        if not self.logger.handlers:
+            self.logger.addHandler(handler)
 
     async def _send_packet(self, data: bytes, expected_response: Optional[bytes] = None) -> Optional[bytes]:
         """Send a packet and optionally wait for a specific response."""
