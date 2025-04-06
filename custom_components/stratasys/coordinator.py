@@ -20,7 +20,7 @@ class PrinterDataCoordinator(DataUpdateCoordinator):
         self.monitor = monitor
 
     async def _async_update_data(self):
-        """Fetch data from the printer."""
+        """Fetch latest data from the printer."""
         try:
             return await self.monitor.get_status()
         except Exception as ex:
