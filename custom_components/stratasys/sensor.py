@@ -1,13 +1,14 @@
-from datetime import timedelta, datetime
+"""Sensor platform for the Stratasys 3D Printer integration."""
+
+from datetime import datetime
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
-from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN
+from .coordinator import PrinterDataCoordinator
 from .printer import StratasysMonitor
-
-SCAN_INTERVAL = timedelta(seconds=30)
 
 def seconds_to_hhmm(seconds):
     """Convert seconds into HH:MM format."""
@@ -35,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         DoorOpenSensor(coordinator),
         LightsOnSensor(coordinator),
 
-        # New Time and Temp Sensors
+        # Time and Odometer Sensors
         ElapsedBuildTimeSensor(coordinator),
         EstimatedBuildTimeSensor(coordinator),
         BuildTimeSensor(coordinator),
@@ -51,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         SupportSetTempSensor(coordinator),
         EnvelopeSetTempSensor(coordinator),
 
-        # Job Info
+        # Job Information Sensors
         JobNameSensor(coordinator),
         CompletionStatusSensor(coordinator),
         PartMaterialNameSensor(coordinator),
@@ -62,26 +63,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     ]
 
     async_add_entities(sensors, update_before_add=True)
-
-class PrinterDataCoordinator(DataUpdateCoordinator):
-    """Coordinator to fetch data from the printer."""
-
-    def __init__(self, hass: HomeAssistant, monitor: StratasysMonitor):
-        """Initialize."""
-        super().__init__(
-            hass,
-            logger=hass.logger,
-            name="Stratasys Printer Data",
-            update_interval=SCAN_INTERVAL,
-        )
-        self.monitor = monitor
-
-    async def _async_update_data(self):
-        """Fetch data from the printer."""
-        try:
-            return await self.monitor.get_status()
-        except Exception as ex:
-            raise Exception(f"Error updating printer data: {ex}")
 
 class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for all Stratasys sensors."""
