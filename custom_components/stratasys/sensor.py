@@ -21,14 +21,14 @@ def seconds_to_hhmm(seconds):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up Stratasys sensors based on a config entry."""
     monitor: StratasysMonitor = hass.data[DOMAIN][entry.entry_id]
-    scan_interval = entry.data.get("scan_interval", 30)  # Default to 30s if missing
+    
+    # Fetch scan_interval from options if available, fallback to initial config
+    scan_interval = entry.options.get("scan_interval", entry.data.get("scan_interval", 30))
 
-    # Pass scan_interval to the coordinator
     coordinator = PrinterDataCoordinator(hass, monitor, scan_interval)
     await coordinator.async_config_entry_first_refresh()
 
     sensors = [
-        # Core Printer Status
         PrinterStatusSensor(coordinator),
         BuildHeadTempSensor(coordinator),
         SupportHeadTempSensor(coordinator),
@@ -37,24 +37,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         TotalLayersSensor(coordinator),
         DoorOpenSensor(coordinator),
         LightsOnSensor(coordinator),
-
-        # Time and Odometer Sensors (HH:MM conversion)
         ElapsedBuildTimeSensor(coordinator),
         EstimatedBuildTimeSensor(coordinator),
         BuildTimeSensor(coordinator),
         RunTimeOdometerSensor(coordinator),
         BuildTimeOdometerSensor(coordinator),
-        StartTimeSensor(coordinator),  # Converted to timestamp
-
-        # Additional Temperature Sensors
+        StartTimeSensor(coordinator),
         PartCurrentTempSensor(coordinator),
         SupportCurrentTempSensor(coordinator),
         EnvelopeCurrentTempSensor(coordinator),
         PartSetTempSensor(coordinator),
         SupportSetTempSensor(coordinator),
         EnvelopeSetTempSensor(coordinator),
-
-        # Job Info
         JobNameSensor(coordinator),
         CompletionStatusSensor(coordinator),
         PartMaterialNameSensor(coordinator),
@@ -91,7 +85,7 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
             "model": "Unknown Model",
         }
 
-# Core Printer Sensors
+# Example Sensor Classes (for all your fields)
 class PrinterStatusSensor(StratasysBaseSensor):
     def __init__(self, coordinator):
         super().__init__(coordinator, "Printer Status", "mdi:printer-3d")
