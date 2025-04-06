@@ -21,12 +21,14 @@ def seconds_to_hhmm(seconds):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up Stratasys sensors based on a config entry."""
     monitor: StratasysMonitor = hass.data[DOMAIN][entry.entry_id]
-    
-    coordinator = PrinterDataCoordinator(hass, monitor)
+    scan_interval = entry.data.get("scan_interval", 30)  # Default to 30s if missing
+
+    # Pass scan_interval to the coordinator
+    coordinator = PrinterDataCoordinator(hass, monitor, scan_interval)
     await coordinator.async_config_entry_first_refresh()
 
     sensors = [
-        # Core Sensors
+        # Core Printer Status
         PrinterStatusSensor(coordinator),
         BuildHeadTempSensor(coordinator),
         SupportHeadTempSensor(coordinator),
@@ -36,15 +38,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         DoorOpenSensor(coordinator),
         LightsOnSensor(coordinator),
 
-        # Time and Odometer Sensors
+        # Time and Odometer Sensors (HH:MM conversion)
         ElapsedBuildTimeSensor(coordinator),
         EstimatedBuildTimeSensor(coordinator),
         BuildTimeSensor(coordinator),
         RunTimeOdometerSensor(coordinator),
         BuildTimeOdometerSensor(coordinator),
-        StartTimeSensor(coordinator),
+        StartTimeSensor(coordinator),  # Converted to timestamp
 
-        # Additional Temp Sensors
+        # Additional Temperature Sensors
         PartCurrentTempSensor(coordinator),
         SupportCurrentTempSensor(coordinator),
         EnvelopeCurrentTempSensor(coordinator),
@@ -52,7 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         SupportSetTempSensor(coordinator),
         EnvelopeSetTempSensor(coordinator),
 
-        # Job Information Sensors
+        # Job Info
         JobNameSensor(coordinator),
         CompletionStatusSensor(coordinator),
         PartMaterialNameSensor(coordinator),
@@ -89,7 +91,7 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
             "model": "Unknown Model",
         }
 
-# Core Sensors
+# Core Printer Sensors
 class PrinterStatusSensor(StratasysBaseSensor):
     def __init__(self, coordinator):
         super().__init__(coordinator, "Printer Status", "mdi:printer-3d")
@@ -154,7 +156,7 @@ class LightsOnSensor(StratasysBaseSensor):
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("lightsOn")
 
-# Time and Odometer Sensors
+# Time and Odometer Sensors (converted to HH:MM)
 class ElapsedBuildTimeSensor(StratasysBaseSensor):
     def __init__(self, coordinator):
         super().__init__(coordinator, "Elapsed Build Time", "mdi:clock-time-eight-outline")
@@ -212,7 +214,7 @@ class StartTimeSensor(StratasysBaseSensor):
             return datetime.utcfromtimestamp(seconds).isoformat()
         return None
 
-# Additional Temp Sensors
+# Additional Temperature Sensors
 class PartCurrentTempSensor(StratasysBaseSensor):
     def __init__(self, coordinator):
         super().__init__(coordinator, "Part Current Temperature", "mdi:thermometer", "°C")
