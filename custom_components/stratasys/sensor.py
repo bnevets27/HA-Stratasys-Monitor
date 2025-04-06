@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     await coordinator.async_config_entry_first_refresh()
 
     sensors = [
+        OnlineStatusSensor(coordinator),
         PrinterStatusSensor(coordinator),
         BuildHeadTempSensor(coordinator),
         SupportHeadTempSensor(coordinator),
@@ -85,6 +86,20 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
             "manufacturer": "Stratasys",
             "model": model,
         }
+
+# Check if the printer is on based on network response
+class OnlineStatusSensor(StratasysBaseSensor):
+    """Printer Online Status Sensor."""
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "Printer Online Status", "mdi:lan-connect")
+
+    @property
+    def native_value(self):
+        if self.available:
+            return "online"
+        else:
+            return "offline"
 
 # Example Sensor Classes (for all your fields)
 class PrinterStatusSensor(StratasysBaseSensor):
