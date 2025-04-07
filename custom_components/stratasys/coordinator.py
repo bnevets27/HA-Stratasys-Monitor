@@ -4,6 +4,7 @@ import logging
 from datetime import timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry  # <--- ADD THIS
 from .const import DOMAIN
 from .printer import StratasysMonitor
 
@@ -12,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class PrinterDataCoordinator(DataUpdateCoordinator):
     """Coordinator to manage fetching data from the printer."""
 
-    def __init__(self, hass: HomeAssistant, monitor: StratasysMonitor, scan_interval: int):
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry, monitor: StratasysMonitor, scan_interval: int):
         """Initialize the coordinator."""
         super().__init__(
             hass,
@@ -21,6 +22,7 @@ class PrinterDataCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=scan_interval),
         )
         self.monitor = monitor
+        self.config_entry = config_entry  # <--- STORE the entry for device_info later!
 
     async def _async_update_data(self):
         """Fetch latest data from the printer."""
