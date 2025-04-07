@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN
 from .coordinator import PrinterDataCoordinator
-from .printer import StratasysMonitor
+from homeassistant.util import slugify
 
 def seconds_to_hhmm(seconds):
     """Convert seconds into HH:MM format."""
@@ -20,37 +20,38 @@ def seconds_to_hhmm(seconds):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up Stratasys sensors based on a config entry."""
-    coordinator: PrinterDataCoordinator = hass.data[DOMAIN][entry.entry_id]  # <-- FIX HERE!
+    coordinator: PrinterDataCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     sensors = [
-        OnlineStatusSensor(coordinator),
-        PrinterStatusSensor(coordinator),
-        BuildHeadTempSensor(coordinator),
-        SupportHeadTempSensor(coordinator),
-        ChamberTempSensor(coordinator),
-        CurrentLayerSensor(coordinator),
-        TotalLayersSensor(coordinator),
-        DoorOpenSensor(coordinator),
-        LightsOnSensor(coordinator),
-        ElapsedBuildTimeSensor(coordinator),
-        EstimatedBuildTimeSensor(coordinator),
-        BuildTimeSensor(coordinator),
-        RunTimeOdometerSensor(coordinator),
-        BuildTimeOdometerSensor(coordinator),
-        StartTimeSensor(coordinator),
-        PartCurrentTempSensor(coordinator),
-        SupportCurrentTempSensor(coordinator),
-        EnvelopeCurrentTempSensor(coordinator),
-        PartSetTempSensor(coordinator),
-        SupportSetTempSensor(coordinator),
-        EnvelopeSetTempSensor(coordinator),
-        JobNameSensor(coordinator),
-        CompletionStatusSensor(coordinator),
-        PartMaterialNameSensor(coordinator),
-        SupportMaterialNameSensor(coordinator),
-        PartConsumedSensor(coordinator),
-        SupportConsumedSensor(coordinator),
-        PackSensor(coordinator),
+        OnlineStatusSensor(coordinator, entry),
+        PrinterStatusSensor(coordinator, entry),
+        BuildHeadTempSensor(coordinator, entry),
+        SupportHeadTempSensor(coordinator, entry),
+        ChamberTempSensor(coordinator, entry),
+        CurrentLayerSensor(coordinator, entry),
+        TotalLayersSensor(coordinator, entry),
+        DoorOpenSensor(coordinator, entry),
+        LightsOnSensor(coordinator, entry),
+        ElapsedBuildTimeSensor(coordinator, entry),
+        EstimatedBuildTimeSensor(coordinator, entry),
+        BuildTimeSensor(coordinator, entry),
+        RunTimeOdometerSensor(coordinator, entry),
+        BuildTimeOdometerSensor(coordinator, entry),
+        StartTimeSensor(coordinator, entry),
+        PartCurrentTempSensor(coordinator, entry),
+        SupportCurrentTempSensor(coordinator, entry),
+        EnvelopeCurrentTempSensor(coordinator, entry),
+        PartSetTempSensor(coordinator, entry),
+        SupportSetTempSensor(coordinator, entry),
+        EnvelopeSetTempSensor(coordinator, entry),
+        JobNameSensor(coordinator, entry),
+        CompletionStatusSensor(coordinator, entry),
+        PartMaterialNameSensor(coordinator, entry),
+        SupportMaterialNameSensor(coordinator, entry),
+        PartConsumedSensor(coordinator, entry),
+        SupportConsumedSensor(coordinator, entry),
+        PackSensor(coordinator, entry),
+        ModelerExplanationSensor(coordinator, entry),
     ]
 
     async_add_entities(sensors, update_before_add=True)
@@ -58,12 +59,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for all Stratasys sensors."""
 
-    def __init__(self, coordinator, name, icon, unit=None):
+    def __init__(self, coordinator, entry, name, icon, unit=None):
         """Initialize the sensor."""
         super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.config_entry = entry
         self._attr_name = name
         self._attr_icon = icon
         self._attr_native_unit_of_measurement = unit
+        self._attr_unique_id = f"{entry.entry_id}_{slugify(name)}"
 
     @property
     def available(self) -> bool:
@@ -72,98 +76,93 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
-        """Return device info."""
+        """Return device info to group sensors under the device."""
         model = self.coordinator.data.get("general", {}).get("modelerType", "Unknown Model")
         return {
-            "identifiers": {(DOMAIN, "stratasys_printer")},
+            "identifiers": {(DOMAIN, self.config_entry.entry_id)},
             "name": "Stratasys 3D Printer",
             "manufacturer": "Stratasys",
             "model": model,
         }
 
-# Check if the printer is on based on network response
-class OnlineStatusSensor(StratasysBaseSensor):
-    """Printer Online Status Sensor."""
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Printer Online Status", "mdi:lan-connect")
+# ---------------- Sensor classes ---------------- #
+
+class OnlineStatusSensor(StratasysBaseSensor):
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Printer Online Status", "mdi:lan-connect")
 
     @property
     def native_value(self):
-        if self.available:
-            return "online"
-        else:
-            return "offline"
+        return "online" if self.available else "offline"
 
-# Example Sensor Classes (for all your fields)
 class PrinterStatusSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Printer Status", "mdi:printer-3d")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Printer Status", "mdi:printer-3d")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("modelerStatus", "Unknown")
 
 class BuildHeadTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Build Head Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Build Head Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("buildHeadTemp")
 
 class SupportHeadTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Support Head Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Support Head Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("buildSuptTemp")
 
 class ChamberTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Chamber Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Chamber Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("buildChamberTemp")
 
 class CurrentLayerSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Current Layer", "mdi:layers-triple")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Current Layer", "mdi:layers-triple")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("currentLayer")
 
 class TotalLayersSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Total Layers", "mdi:layers-triple")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Total Layers", "mdi:layers-triple")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("totalLayers")
 
 class DoorOpenSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Door Open", "mdi:door-open")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Door Open", "mdi:door-open")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("doorOpen")
 
 class LightsOnSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Lights On", "mdi:lightbulb-on")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Lights On", "mdi:lightbulb-on")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("lightsOn")
 
-# Time and Odometer Sensors (converted to HH:MM)
 class ElapsedBuildTimeSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Elapsed Build Time", "mdi:clock-time-eight-outline")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Elapsed Build Time", "mdi:clock-time-eight-outline")
 
     @property
     def native_value(self):
@@ -171,8 +170,8 @@ class ElapsedBuildTimeSensor(StratasysBaseSensor):
         return seconds_to_hhmm(seconds)
 
 class EstimatedBuildTimeSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Estimated Build Time", "mdi:clock-time-eight-outline")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Estimated Build Time", "mdi:clock-time-eight-outline")
 
     @property
     def native_value(self):
@@ -180,8 +179,8 @@ class EstimatedBuildTimeSensor(StratasysBaseSensor):
         return seconds_to_hhmm(seconds)
 
 class BuildTimeSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Build Time", "mdi:clock-time-eight-outline")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Build Time", "mdi:clock-time-eight-outline")
 
     @property
     def native_value(self):
@@ -189,8 +188,8 @@ class BuildTimeSensor(StratasysBaseSensor):
         return seconds_to_hhmm(seconds)
 
 class RunTimeOdometerSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Run Time Odometer", "mdi:clock-time-eight-outline")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Run Time Odometer", "mdi:clock-time-eight-outline")
 
     @property
     def native_value(self):
@@ -198,8 +197,8 @@ class RunTimeOdometerSensor(StratasysBaseSensor):
         return seconds_to_hhmm(seconds)
 
 class BuildTimeOdometerSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Build Time Odometer", "mdi:clock-time-eight-outline")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Build Time Odometer", "mdi:clock-time-eight-outline")
 
     @property
     def native_value(self):
@@ -207,8 +206,8 @@ class BuildTimeOdometerSensor(StratasysBaseSensor):
         return seconds_to_hhmm(seconds)
 
 class StartTimeSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Start Time", "mdi:clock-start")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Start Time", "mdi:clock-start")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
@@ -218,108 +217,117 @@ class StartTimeSensor(StratasysBaseSensor):
             return datetime.utcfromtimestamp(seconds).isoformat()
         return None
 
-# Additional Temperature Sensors
 class PartCurrentTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Part Current Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Part Current Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("partCurrentTemp")
 
 class SupportCurrentTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Support Current Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Support Current Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("supportCurrentTemp")
 
 class EnvelopeCurrentTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Envelope Current Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Envelope Current Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("envelopeCurrentTemp")
 
 class PartSetTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Part Set Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Part Set Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("partSetTemp")
 
 class SupportSetTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Support Set Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Support Set Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("supportSetTemp")
 
 class EnvelopeSetTempSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Envelope Set Temperature", "mdi:thermometer", "°C")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Envelope Set Temperature", "mdi:thermometer", "°C")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("general", {}).get("envelopeSetTemp")
 
-# Job Information Sensors
 class JobNameSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Current Job Name", "mdi:format-title")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Current Job Name", "mdi:format-title")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("jobName")
 
 class CompletionStatusSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Job Completion Status", "mdi:check-decagram")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Job Completion Status", "mdi:check-decagram")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("completionStatus")
 
 class PartMaterialNameSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Part Material Name", "mdi:label")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Part Material Name", "mdi:label")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("partMatlName")
 
 class SupportMaterialNameSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Support Material Name", "mdi:label")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Support Material Name", "mdi:label")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("supportMatlName")
 
 class PartConsumedSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Part Material Consumed", "mdi:weight-gram", "g")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Part Material Consumed", "mdi:weight-gram", "g")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("partConsumed")
 
 class SupportConsumedSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Support Material Consumed", "mdi:weight-gram", "g")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Support Material Consumed", "mdi:weight-gram", "g")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("supportConsumed")
 
 class PackSensor(StratasysBaseSensor):
-    def __init__(self, coordinator):
-        super().__init__(coordinator, "Pack", "mdi:package-variant")
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Pack", "mdi:package-variant")
 
     @property
     def native_value(self):
         return self.coordinator.data.get("currentJob", {}).get("pack")
+
+class ModelerExplanationSensor(StratasysBaseSensor):
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "Modeler Explanation", "mdi:information")
+
+    @property
+    def native_value(self):
+        explanation = self.coordinator.data.get("general", {}).get("modelerExplanation")
+        if isinstance(explanation, list):
+            return " ".join(explanation)
+        return None
