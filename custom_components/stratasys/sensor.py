@@ -20,13 +20,7 @@ def seconds_to_hhmm(seconds):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up Stratasys sensors based on a config entry."""
-    monitor: StratasysMonitor = hass.data[DOMAIN][entry.entry_id]
-    
-    # Fetch scan_interval from options if available, fallback to initial config
-    scan_interval = entry.options.get("scan_interval", entry.data.get("scan_interval", 30))
-
-    coordinator = PrinterDataCoordinator(hass, monitor, scan_interval)
-    await coordinator.async_config_entry_first_refresh()
+    coordinator: PrinterDataCoordinator = hass.data[DOMAIN][entry.entry_id]  # <-- FIX HERE!
 
     sensors = [
         OnlineStatusSensor(coordinator),
