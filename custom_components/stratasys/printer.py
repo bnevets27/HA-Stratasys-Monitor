@@ -7,9 +7,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum, auto
-import json
-from pathlib import Path
-import sys
+
+_LOGGER = logging.getLogger(__name__)  # Standard Home Assistant logging
 
 class PrinterError(Exception):
     """Base exception for printer errors."""
@@ -55,67 +54,44 @@ class StratasysMonitor:
         self.config = config or PrinterConfig(host='127.0.0.1', port=53742)
         self.sock: Optional[socket.socket] = None
         self.connected: bool = False
-        self._setup_logging()
 
-    def _setup_logging(self) -> None:
-        """Configure logging for Home Assistant."""
-        self.logger = logging.getLogger('StratasysMonitor')
-        self.logger.setLevel(self.config.log_level)
-    
-        # Only use StreamHandler (no FileHandler!)
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '%(asctime)s - %(levelname)s - [%(name)s] - %(message)s'
-        ))
-    
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
-
-    async def _send_packet(self, data: bytes, expected_response: Optional[bytes] = None) -> Optional[bytes]:
-        """Send a packet and optionally wait for a specific response."""
+    async def _send_packet(self, data: bytes) -> None:
+        """Send a packet to the printer."""
         try:
-            self.sock.send(data.ljust(self.config.packet_size, b'\x00'))
-
-            if expected_response:
-                response = self.sock.recv(self.config.packet_size)
-                if expected_response not in response:
-                    raise ProtocolError(f"Expected {expected_response}, got {response}")
-                return response
-            return None
-
+            await asyncio.to_thread(self.sock.send, data.ljust(self.config.packet_size, b'\x00'))
         except socket.timeout:
             raise ConnectionError("Timeout sending packet")
         except socket.error as e:
             raise ConnectionError(f"Socket error: {e}")
 
+    async def _recv_packet(self, size: int = None) -> bytes:
+        """Receive a packet from the printer."""
+        size = size or self.config.packet_size
+        return await asyncio.to_thread(self.sock.recv, size)
+
     async def _get_printer_data(self) -> bytes:
         """Execute the full printer protocol sequence."""
         try:
-            # Sequence 1-2: Initial commands
             await self._send_packet(b'GetFile')
             await asyncio.sleep(self.PROTOCOL_DELAYS['command'])
 
             await self._send_packet(b'status.sts')
             await asyncio.sleep(self.PROTOCOL_DELAYS['command'])
 
-            # Sequence 3-5: Handshake
             await self._send_packet(b'NA')
             await asyncio.sleep(self.PROTOCOL_DELAYS['response'])
 
-            # Wait for SendFile response
-            sendfile = self.sock.recv(self.config.packet_size)
+            sendfile = await self._recv_packet()
             if b'SendFile' not in sendfile:
                 raise ProtocolError(f"Expected SendFile, got: {sendfile}")
             await asyncio.sleep(self.PROTOCOL_DELAYS['transfer'])
 
-            # Wait for NA response
-            na = self.sock.recv(self.config.packet_size)
+            na = await self._recv_packet()
             if b'NA' not in na:
                 raise ProtocolError(f"Expected NA, got: {na}")
 
-            # Send OK and get size
             await self._send_packet(b'OK')
-            size_data = self.sock.recv(self.config.packet_size)
+            size_data = await self._recv_packet()
             if not size_data:
                 raise ProtocolError("No size data received")
 
@@ -125,15 +101,13 @@ class StratasysMonitor:
             except (ValueError, IndexError):
                 raise ProtocolError(f"Invalid size data: {size_data}")
 
-            # Send final OK
             await self._send_packet(b'OK')
 
-            # Receive data chunks
             data = bytearray()
             self.sock.settimeout(5.0)
 
             while len(data) < expected_size:
-                chunk = self.sock.recv(1460)
+                chunk = await self._recv_packet(1460)
                 if not chunk:
                     if len(data) == 0:
                         raise ProtocolError("Connection closed without data")
@@ -143,7 +117,7 @@ class StratasysMonitor:
                 if b'Transferred:' in chunk:
                     break
 
-            self.logger.debug(f"Received {len(data)} bytes of {expected_size} expected")
+            _LOGGER.debug(f"Received {len(data)} bytes of {expected_size} expected")
 
             confirm_msg = f"Transferred: {len(data)}".encode()
             await self._send_packet(confirm_msg)
@@ -151,7 +125,7 @@ class StratasysMonitor:
             return bytes(data)
 
         except Exception as e:
-            self.logger.error(f"Protocol sequence failed: {e}")
+            _LOGGER.error(f"Protocol sequence failed: {e}")
             raise ProtocolError(f"Protocol sequence failed: {e}")
         finally:
             if self.sock:
@@ -165,16 +139,10 @@ class StratasysMonitor:
                 raise ValueError("No status data found")
 
             parsed = self._parse_tcl_status(status_data.decode('utf-8', errors='ignore'))
-
-            status_cache = Path('/config/cache')
-            status_cache.mkdir(parents=True, exist_ok=True)
-            with open(status_cache / 'last_status.json', 'w') as f:
-                json.dump(parsed, f, indent=2)
-
             return parsed
 
         except Exception as e:
-            self.logger.error(f"Status parsing failed: {e}")
+            _LOGGER.error(f"Status parsing failed: {e}")
             return {}
 
     def _parse_tcl_status(self, tcl_data: str) -> Dict[str, Any]:
@@ -218,57 +186,56 @@ class StratasysMonitor:
                         value = value[1:-1]
                         if ' ' in value:
                             value = [v.strip() for v in value.split()]
-
                     elif value.replace('.', '').isdigit():
                         value = float(value) if '.' in value else int(value)
-
                     elif value.lower() in ('true', 'false'):
                         value = value.lower() == 'true'
 
                     current_section[key] = value
 
         except Exception as e:
-            self.logger.error(f"TCL parsing error: {e}")
+            _LOGGER.error(f"TCL parsing error: {e}")
             return {}
 
         return result
+
+    async def connect(self):
+        """Establish connection to the printer."""
+        try:
+            def _create_socket():
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(self.config.timeout)
+                sock.connect((self.config.host, self.config.port))
+                return sock
+
+            self.sock = await asyncio.to_thread(_create_socket)
+
+            _LOGGER.info(f"Connected to printer at {self.config.host}:{self.config.port}")
+            self.connected = True
+
+        except Exception as e:
+            _LOGGER.error(f"Connection failed: {e}")
+            self.connected = False
+            raise ConnectionError(f"Failed to connect: {e}")
 
     async def get_status(self) -> Dict[str, Any]:
         """Get printer status with retries."""
         for attempt in range(self.config.retry_attempts):
             try:
-                if not self.connected:
-                    await self.connect()
+                await self.connect()  # Always connect fresh!
 
                 data = await self._get_printer_data()
                 return self._parse_status(data)
 
             except PrinterError as e:
-                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                _LOGGER.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < self.config.retry_attempts - 1:
                     await asyncio.sleep(self.config.retry_delay)
                     continue
                 raise
 
-    async def connect(self) -> None:
-        """Establish connection to the printer."""
-        try:
-            if self.sock:
-                try:
-                    self.sock.close()
-                except Exception:
-                    pass
-                self.sock = None
-
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(self.config.timeout)
-            self.sock.connect((self.config.host, self.config.port))
-            self.connected = True
-            self.logger.info(f"Successfully connected to printer at {self.config.host}:{self.config.port}")
-
-        except Exception as e:
-            self.connected = False
-            raise ConnectionError(f"Failed to connect: {str(e)}")
+            finally:
+                self.cleanup()  # Always cleanup socket after attempt!
 
     def cleanup(self):
         """Clean up resources."""
@@ -279,4 +246,4 @@ class StratasysMonitor:
                 pass
             self.sock = None
         self.connected = False
-        self.logger.info("Monitor stopped")
+        _LOGGER.info("Monitor stopped")
