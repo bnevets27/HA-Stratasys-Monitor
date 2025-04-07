@@ -1,6 +1,6 @@
 # Stratasys 3D Printer Integration for Home Assistant
 
-This custom integration connects your Stratasys 3D printer to Home Assistant and provides real-time sensors for printer status, temperatures, job progress, and more.
+This custom integration connects your Stratasys 3D printer to Home Assistant and provides real-time sensors for printer status, temperatures, job progress, and more. Only been tested on a Dimension 768 but likely will work on other models as well.
 
 ## Features
 
