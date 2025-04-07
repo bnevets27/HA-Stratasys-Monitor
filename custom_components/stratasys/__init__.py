@@ -5,37 +5,46 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN
-from .printer import StratasysMonitor
+from .printer import PrinterConfig, StratasysMonitor
+from .coordinator import PrinterDataCoordinator
 
-async def async_setup(hass: HomeAssistant, config) -> bool:
-    """Set up the Stratasys Printer integration."""
-    # Nothing to do here for now, setup is fully handled by config entries
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the Stratasys Printer integration from YAML (not used)."""
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Stratasys Printer from a config entry."""
-    monitor = StratasysMonitor()
+    config = PrinterConfig(
+        host=entry.data["host"],
+        port=entry.data["port"],
+        timeout=2.0,
+        retry_attempts=3,
+        retry_delay=1.0,
+        packet_size=64,
+    )
+
+    monitor = StratasysMonitor(config)
 
     try:
-        # Attempt initial connection to printer
+        # Only test the connection, don't fetch status here
         await monitor.connect()
     except Exception as ex:
-        # If connection fails, mark entry as not ready (HA will retry later)
         raise ConfigEntryNotReady(f"Printer not ready: {ex}") from ex
 
-    # Store monitor object for use in coordinator and sensors
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = monitor
+    # Create coordinator
+    coordinator = PrinterDataCoordinator(hass, monitor, entry.options.get("scan_interval", 30))
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # Now safely forward to the sensor platform
-    await hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    # Do an initial refresh (fetch status)
+    await coordinator.async_config_entry_first_refresh()
+
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor"])
 
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a Stratasys Printer config entry."""
-    monitor: StratasysMonitor = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if monitor:
-        monitor.cleanup()
+    coordinator: PrinterDataCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+    await coordinator.async_close()
 
-    # Unload the sensor platform
     return await hass.config_entries.async_forward_entry_unload(entry, "sensor")
