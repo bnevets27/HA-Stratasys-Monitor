@@ -31,11 +31,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as ex:
         raise ConfigEntryNotReady(f"Printer not ready: {ex}") from ex
 
-    # Create coordinator
-    coordinator = PrinterDataCoordinator(hass, monitor, entry.options.get("scan_interval", 30))
+    coordinator = PrinterDataCoordinator(hass, entry, monitor, entry.options.get("scan_interval", 30))
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # Do an initial refresh (fetch status)
+    # Initial fetch
     await coordinator.async_config_entry_first_refresh()
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor"])
@@ -45,6 +44,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a Stratasys Printer config entry."""
     coordinator: PrinterDataCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
-    await coordinator.async_close()
 
-    return await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    # ✅ Properly cleanup socket
+    coordinator.monitor.cleanup()
+
+    return await hass.config_entries.async_forward_entry_unload(entry, ["sensor", "binary_sensor"])
