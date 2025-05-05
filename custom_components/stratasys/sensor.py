@@ -190,7 +190,7 @@ class ModelerExplanationSensor(StratasysBaseSensor):
 
 class CurrentLayerSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry, "Job Current Layer", "mdi:layers-triple")
+        super().__init__(coordinator, entry, "Job Layer Current", "mdi:layers-triple")
 
     @property
     def native_value(self):
@@ -199,7 +199,7 @@ class CurrentLayerSensor(StratasysBaseSensor):
 
 class TotalLayersSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry, "Job Total Layers", "mdi:layers-triple")
+        super().__init__(coordinator, entry, "Job Layer Total", "mdi:layers-triple")
 
     @property
     def native_value(self):
@@ -679,7 +679,7 @@ class SupportHeaterPWMSensor(StratasysBaseSensor):
 
 class ChamberHeaterSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry, "Chamber Heater", "mdi:fire")
+        super().__init__(coordinator, entry, "Chamber Heater On", "mdi:fire")
     @property
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("chamberHeater")
@@ -794,7 +794,8 @@ class JobCommentSensor(StratasysBaseSensor):
         super().__init__(coordinator, entry, "Job Comment", "mdi:comment-text")
     @property
     def native_value(self):
-        return self.coordinator.data.get("currentJob", {}).get("comment")
+        raw = self.coordinator.data.get("currentJob", {}).get("comment")
+        return clean_list(raw)
 
 class PackSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
@@ -809,9 +810,11 @@ class PackSensor(StratasysBaseSensor):
 class ProducerSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "Job Producer", "mdi:account-cog")
+        
     @property
     def native_value(self):
-        return self.coordinator.data.get("currentJob", {}).get("producer")
+        raw = self.coordinator.data.get("currentJob", {}).get("producer")
+        return clean_list(raw)
 
 
 #  Odometer Readings -------------------
