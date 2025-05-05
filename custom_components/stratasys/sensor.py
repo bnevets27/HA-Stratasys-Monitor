@@ -160,7 +160,8 @@ class PrinterStatusSensor(StratasysBaseSensor):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("general", {}).get("modelerStatus", "Unknown")
+        raw = self.coordinator.data.get("general", {}).get("modelerStatus", "Unknown")
+        return clean_list(raw)
 
 
 class InternalStateSensor(StratasysBaseSensor):
