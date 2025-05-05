@@ -11,16 +11,6 @@ from .const import DOMAIN
 from .coordinator import PrinterDataCoordinator
 from homeassistant.util import slugify
 
-
-def seconds_to_hhmm(seconds):
-    """Convert seconds into HH:MM format."""
-    if seconds is None:
-        return None
-    minutes, _ = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{int(hours):02}:{int(minutes):02}"
-
-
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
 ):
@@ -39,7 +29,7 @@ async def async_setup_entry(
         EstimatedBuildTimeSensor(coordinator, entry),
         EstimatedCompletionTimeSensor(coordinator, entry),
         CompletionStatusSensor(coordinator, entry),
-        # Machine Info
+        #  Machine Info
         ModelTypeSensor(coordinator, entry),
         ControllerVersionSensor(coordinator, entry),
         CompatibleCMBVersionSensor(coordinator, entry),
@@ -112,6 +102,19 @@ async def async_setup_entry(
 
     async_add_entities(sensors, update_before_add=True)
 
+def seconds_to_hhmm(seconds):
+    """Convert seconds into HH:MM format."""
+    if seconds is None:
+        return None
+    minutes, _ = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{int(hours):02}:{int(minutes):02}"
+
+def clean_list(raw):
+    """If raw is a list of strings, strip out commas and join with spaces; else return as-is."""
+    if isinstance(raw, list):
+        return " ".join(item.replace(",", "") for item in raw)
+    return raw
 
 class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for all Stratasys sensors."""
@@ -230,13 +233,6 @@ class ElapsedBuildTimeSensor(StratasysBaseSensor):
         secs = self.coordinator.data.get("general", {}).get("elapsedBuildTime")
         return seconds_to_hhmm(secs)
 
-def clean_list(raw):
-    """If raw is a list of strings, strip out commas and join with spaces; else return as-is."""
-    if isinstance(raw, list):
-        return " ".join(item.replace(",", "") for item in raw)
-    return raw
-
-
 class EstimatedBuildTimeSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
         super().__init__(
@@ -274,7 +270,6 @@ class EstimatedCompletionTimeSensor(StratasysBaseSensor):
             return datetime.utcfromtimestamp(finish_ts).isoformat()
         return None
 
-
 class CompletionStatusSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
         super().__init__(
@@ -288,12 +283,6 @@ class CompletionStatusSensor(StratasysBaseSensor):
     def native_value(self):
         raw = self.coordinator.data.get("currentJob", {}).get("completionStatus")
         return clean_list(raw)
-
-
-    @property
-    def native_value(self):
-        return self.coordinator.data.get("currentJob", {}).get("completionStatus")
-
 
 class ModelTypeSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
@@ -595,7 +584,7 @@ class CurrentCurveSensor(StratasysBaseSensor):
     def native_value(self):
         return self.coordinator.data.get("mariner", {}).get("currentCurve")
 
-#  Head & Tip Details -------------------
+# 🔩 Head & Tip Details -------------------
 
 class PartTipSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
