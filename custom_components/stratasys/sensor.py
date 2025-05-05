@@ -1,6 +1,6 @@
 """Sensor platform for the Stratasys 3D Printer integration."""
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.core import HomeAssistant
@@ -249,27 +249,27 @@ class EstimatedBuildTimeSensor(StratasysBaseSensor):
         return seconds_to_hhmm(secs)
 
 class EstimatedCompletionTimeSensor(StratasysBaseSensor):
-    """Calculated finish time = startTime + estimatedBuildTime."""
+    """Finish = now + (estimatedBuildTime – elapsedBuildTime)"""
 
     def __init__(self, coordinator, entry):
         super().__init__(
             coordinator,
             entry,
-            "Estimated Completion Time",
+            "Job Estimated Completion Time",
             "mdi:clock-end",
         )
-        # Tell HA this is a timestamp so it gets formatted nicely
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
     def native_value(self):
-        data = self.coordinator.data.get("currentJob", {})
-        start = data.get("startTime")
-        est   = data.get("estimatedBuildTime")
-        if start and est is not None:
-            finish_ts = start + est
-            return datetime.utcfromtimestamp(finish_ts).isoformat()
+        data    = self.coordinator.data.get("currentJob", {})
+        est     = data.get("estimatedBuildTime")
+        elapsed = self.coordinator.data.get("general", {}).get("elapsedBuildTime")
+        if isinstance(est, (int, float)) and isinstance(elapsed, (int, float)):
+            remaining = est - elapsed
+            return datetime.now(timezone.utc) + timedelta(seconds=remaining)
         return None
+
 
 class CompletionStatusSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
@@ -757,22 +757,25 @@ class StartTimeSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "Job Start Time", "mdi:clock-start")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
     @property
     def native_value(self):
         secs = self.coordinator.data.get("currentJob", {}).get("startTime")
-        if secs and secs > 0:
-            return datetime.utcfromtimestamp(secs).isoformat()
+        if isinstance(secs, (int, float)) and secs > 0:
+            return datetime.fromtimestamp(secs, tz=timezone.utc)
         return None
+
 
 class SubmitTimeSensor(StratasysBaseSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "Job Submit Time", "mdi:clock-end")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
     @property
     def native_value(self):
         secs = self.coordinator.data.get("currentJob", {}).get("submitTime")
-        if secs and secs > 0:
-            return datetime.utcfromtimestamp(secs).isoformat()
+        if isinstance(secs, (int, float)) and secs > 0:
+            return datetime.fromtimestamp(secs, tz=timezone.utc)
         return None
 
 class PartMaterialNameSensor(StratasysBaseSensor):
