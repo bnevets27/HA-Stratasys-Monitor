@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
+import os
 
 _LOGGER = logging.getLogger(__name__)  # Standard Home Assistant logging
 
@@ -236,6 +238,139 @@ class StratasysMonitor:
 
             finally:
                 self.cleanup()  # Always cleanup socket after attempt!
+
+    async def send_light_command(self, command: str) -> bool:
+        """Send a light control command (on, off, or toggle) to the printer."""
+        valid_commands = ["on", "off", "toggle"]
+        if command.lower() not in valid_commands:
+            _LOGGER.error(f"Invalid light command: {command}")
+            return False
+            
+        try:
+            # Get the path to the binary file
+            integration_dir = Path(__file__).parent
+            bin_path = integration_dir / "light-control.bin"
+            
+            if not bin_path.exists():
+                _LOGGER.error(f"Light control binary not found: {bin_path}")
+                return False
+                
+            # Load the raw capture
+            raw = bin_path.read_bytes()
+            
+            # Create the command bytes (15 bytes exactly)
+            cmd_lower = command.lower()
+            if cmd_lower == "on":
+                new_command = b"lights on      "  # 15 bytes
+            elif cmd_lower == "off":
+                new_command = b"lights off     "  # 15 bytes  
+            else:  # toggle
+                new_command = b"lights toggle  "  # 15 bytes
+                
+            # Replace the last 15 bytes with our command
+            modified_raw = raw[:-15] + new_command
+            
+            # Create a fresh connection for light command
+            sock = None
+            try:
+                def _create_light_socket():
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(5.0)
+                    s.connect((self.config.host, self.config.port))
+                    return s
+                    
+                sock = await asyncio.to_thread(_create_light_socket)
+                await asyncio.to_thread(sock.sendall, modified_raw)
+                
+                # Read any responses (optional)
+                responses = []
+                sock.settimeout(0.5)
+                try:
+                    while True:
+                        data = await asyncio.to_thread(sock.recv, 4096)
+                        if not data:
+                            break
+                        responses.append(data)
+                except socket.timeout:
+                    pass
+                    
+                _LOGGER.info(f"Light command '{command}' sent successfully")
+                return True
+                
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                        
+        except Exception as e:
+            _LOGGER.error(f"Failed to send light command '{command}': {e}")
+            return False
+            
+    async def turn_light_on(self) -> bool:
+        """Turn the printer light ON."""
+        return await self.send_light_command("on")
+        
+    async def turn_light_off(self) -> bool:
+        """Turn the printer light OFF."""
+        return await self.send_light_command("off")
+        
+    async def toggle_light(self) -> bool:
+        """Toggle the printer light."""
+        return await self.send_light_command("toggle")
+        
+    async def toggle_door_latch(self) -> bool:
+        """Toggle the printer door latch."""
+        try:
+            # Get the path to the binary file
+            integration_dir = Path(__file__).parent
+            bin_path = integration_dir / "door-latch-toggle.bin"
+            
+            if not bin_path.exists():
+                _LOGGER.error(f"Door latch control binary not found: {bin_path}")
+                return False
+                
+            # Load the raw capture
+            raw = bin_path.read_bytes()
+            
+            # Create a fresh connection for door latch command
+            sock = None
+            try:
+                def _create_door_socket():
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(5.0)
+                    s.connect((self.config.host, self.config.port))
+                    return s
+                    
+                sock = await asyncio.to_thread(_create_door_socket)
+                await asyncio.to_thread(sock.sendall, raw)
+                
+                # Read any responses (optional)
+                responses = []
+                sock.settimeout(0.5)
+                try:
+                    while True:
+                        data = await asyncio.to_thread(sock.recv, 4096)
+                        if not data:
+                            break
+                        responses.append(data)
+                except socket.timeout:
+                    pass
+                    
+                _LOGGER.info("Door latch toggle command sent successfully")
+                return True
+                
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                        
+        except Exception as e:
+            _LOGGER.error(f"Failed to toggle door latch: {e}")
+            return False
 
     def cleanup(self):
         """Clean up resources."""

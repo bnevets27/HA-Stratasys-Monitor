@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Initial fetch
     await coordinator.async_config_entry_first_refresh()
 
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "light", "switch"])
 
     return True
 
@@ -48,4 +48,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ✅ Properly cleanup socket
     coordinator.monitor.cleanup()
 
-    return await hass.config_entries.async_forward_entry_unload(entry, ["sensor", "binary_sensor"])
+    return await hass.config_entries.async_forward_entry_unload(entry, ["sensor", "binary_sensor", "light", "switch"])
