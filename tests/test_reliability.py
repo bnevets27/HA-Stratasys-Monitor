@@ -3,6 +3,7 @@
 import asyncio
 from pathlib import Path
 from datetime import timedelta
+from enum import StrEnum
 import sys
 import types
 import unittest
@@ -42,6 +43,10 @@ class LightStub:
     pass
 
 
+class ColorMode(StrEnum):
+    ONOFF = "onoff"
+
+
 class SwitchStub:
     pass
 
@@ -58,6 +63,7 @@ for module, name, value in (
     ("helpers.update_coordinator", "CoordinatorEntity", EntityStub),
     ("helpers.entity_platform", "AddEntitiesCallback", object),
     ("components.light", "LightEntity", LightStub),
+    ("components.light", "ColorMode", ColorMode),
     ("components.switch", "SwitchEntity", SwitchStub),
 ):
     setattr(sys.modules["homeassistant." + module], name, value)
@@ -66,7 +72,7 @@ from custom_components.stratasys.coordinator import PrinterDataCoordinator
 from custom_components.stratasys.printer import (
     ConnectionError as PrinterConnectionError, PrinterConfig, ProtocolError, StratasysMonitor,
 )
-from custom_components.stratasys.light import StratasysLight
+from custom_components.stratasys.light import StratasysLight, async_setup_entry as setup_light
 from custom_components.stratasys.switch import StratasyssDoorLatchSwitch
 
 
@@ -86,6 +92,19 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.sleep = patch("asyncio.sleep", new=AsyncMock())
         self.sleep.start()
         self.addCleanup(self.sleep.stop)
+
+    async def test_light_setup_preserves_identity_and_declares_onoff_mode(self):
+        entry = types.SimpleNamespace(entry_id="test", title="192.168.1.28")
+        hass = types.SimpleNamespace(data={"stratasys": {entry.entry_id: self.coordinator}})
+        entities = []
+        await setup_light(hass, entry, entities.extend)
+        self.assertEqual(len(entities), 1)
+        light = entities[0]
+        self.assertEqual(light._attr_unique_id, "test_light")
+        self.assertEqual(light._attr_supported_color_modes, {ColorMode.ONOFF})
+        self.assertEqual(light._attr_color_mode, ColorMode.ONOFF)
+        self.assertTrue(light.available)
+        self.assertFalse(light.is_on)
 
     async def test_offline_and_recovery(self):
         self.monitor.get_status.side_effect = [OSError(), OSError(), {"mariner": {"lightsOn": 0}}]

@@ -4,7 +4,7 @@ import logging
 import asyncio
 from typing import Any
 
-from homeassistant.components.light import LightEntity
+from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -34,6 +34,9 @@ async def async_setup_entry(
 
 class StratasysLight(CoordinatorEntity, LightEntity):
     """Stratasys printer chamber light control."""
+
+    _attr_color_mode = ColorMode.ONOFF
+    _attr_supported_color_modes = {ColorMode.ONOFF}
 
     def __init__(self, coordinator: PrinterDataCoordinator, config_entry: ConfigEntry) -> None:
         """Initialize the light."""
