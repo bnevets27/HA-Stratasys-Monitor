@@ -2,16 +2,11 @@
 
 import voluptuous as vol
 from homeassistant import config_entries
-from .const import DOMAIN
 
 DEFAULT_SCAN_INTERVAL = 30
 
 class StratasysOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Stratasys Printer."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry):
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""

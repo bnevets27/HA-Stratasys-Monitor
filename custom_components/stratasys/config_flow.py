@@ -2,6 +2,7 @@
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 from .const import DOMAIN
 from .options_flow import StratasysOptionsFlowHandler
 
@@ -11,6 +12,12 @@ class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Stratasys Printer."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return StratasysOptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -31,7 +38,3 @@ class StratasysPrinterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
         )
-
-async def async_get_options_flow(config_entry):
-    """Get the options flow for this handler."""
-    return StratasysOptionsFlowHandler(config_entry)

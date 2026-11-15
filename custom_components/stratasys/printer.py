@@ -60,16 +60,25 @@ class StratasysMonitor:
     async def _send_packet(self, data: bytes) -> None:
         """Send a packet to the printer."""
         try:
-            await asyncio.to_thread(self.sock.send, data.ljust(self.config.packet_size, b'\x00'))
+            await asyncio.to_thread(self.sock.sendall, data.ljust(self.config.packet_size, b'\x00'))
         except socket.timeout:
             raise ConnectionError("Timeout sending packet")
         except socket.error as e:
             raise ConnectionError(f"Socket error: {e}")
 
     async def _recv_packet(self, size: int = None) -> bytes:
-        """Receive a packet from the printer."""
-        size = size or self.config.packet_size
-        return await asyncio.to_thread(self.sock.recv, size)
+        """Read exactly one frame (or payload block), regardless of TCP splits."""
+        size = self.config.packet_size if size is None else size
+        data = bytearray()
+        try:
+            while len(data) < size:
+                chunk = await asyncio.to_thread(self.sock.recv, size - len(data))
+                if not chunk:
+                    raise ConnectionError("Printer closed the connection")
+                data.extend(chunk)
+            return bytes(data)
+        except OSError as exc:
+            raise ConnectionError(f"Socket receive failed: {exc}") from exc
 
     async def _get_printer_data(self) -> bytes:
         """Execute the full printer protocol sequence."""
@@ -94,12 +103,11 @@ class StratasysMonitor:
 
             await self._send_packet(b'OK')
             size_data = await self._recv_packet()
-            if not size_data:
-                raise ProtocolError("No size data received")
-
             try:
-                size_str = size_data.strip().split(b' ')[0]
+                size_str = size_data.split(b'\x00', 1)[0].strip().split(b' ')[0]
                 expected_size = int(size_str)
+                if expected_size <= 0:
+                    raise ValueError("Status size must be positive")
             except (ValueError, IndexError):
                 raise ProtocolError(f"Invalid size data: {size_data}")
 
@@ -109,15 +117,8 @@ class StratasysMonitor:
             self.sock.settimeout(5.0)
 
             while len(data) < expected_size:
-                chunk = await self._recv_packet(1460)
-                if not chunk:
-                    if len(data) == 0:
-                        raise ProtocolError("Connection closed without data")
-                    break
+                chunk = await self._recv_packet(min(1460, expected_size - len(data)))
                 data.extend(chunk)
-
-                if b'Transferred:' in chunk:
-                    break
 
             _LOGGER.debug(f"Received {len(data)} bytes of {expected_size} expected")
 
@@ -126,9 +127,6 @@ class StratasysMonitor:
 
             return bytes(data)
 
-        except Exception as e:
-            _LOGGER.error(f"Protocol sequence failed: {e}")
-            raise ProtocolError(f"Protocol sequence failed: {e}")
         finally:
             if self.sock:
                 self.sock.settimeout(self.config.timeout)
@@ -136,7 +134,12 @@ class StratasysMonitor:
     def _parse_status(self, data: bytes) -> Dict[str, Any]:
         """Parse printer status with error handling."""
         try:
-            status_data = data[data.find(b'set machineStatus'):data.find(b'Transferred:')]
+            start = data.find(b'set machineStatus')
+            if start < 0:
+                raise ValueError("No status data found")
+            # A length-bounded payload need not include a transfer trailer.
+            end = data.find(b'Transferred:', start)
+            status_data = data[start:end if end >= 0 else len(data)]
             if not status_data:
                 raise ValueError("No status data found")
 
@@ -203,41 +206,40 @@ class StratasysMonitor:
 
     async def connect(self):
         """Establish connection to the printer."""
-        try:
-            def _create_socket():
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        def _create_socket():
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
                 sock.settimeout(self.config.timeout)
                 sock.connect((self.config.host, self.config.port))
                 return sock
+            except BaseException:
+                sock.close()
+                raise
 
+        try:
             self.sock = await asyncio.to_thread(_create_socket)
-
-            _LOGGER.info(f"Connected to printer at {self.config.host}:{self.config.port}")
-            self.connected = True
-
-        except Exception as e:
-            _LOGGER.error(f"Connection failed: {e}")
+        except OSError as exc:
             self.connected = False
-            raise ConnectionError(f"Failed to connect: {e}")
+            raise ConnectionError(f"Failed to connect: {exc}") from exc
+
+        _LOGGER.debug("Connected to printer at %s:%s", self.config.host, self.config.port)
+        self.connected = True
 
     async def get_status(self) -> Dict[str, Any]:
-        """Get printer status with retries."""
+        """Get printer status with retries for expected connection failures."""
         for attempt in range(self.config.retry_attempts):
             try:
-                await self.connect()  # Always connect fresh!
-
+                await self.connect()
                 data = await self._get_printer_data()
                 return self._parse_status(data)
-
-            except PrinterError as e:
-                _LOGGER.warning(f"Attempt {attempt + 1} failed: {e}")
+            except ConnectionError as exc:
+                _LOGGER.debug("Connection attempt %s failed: %s", attempt + 1, exc)
                 if attempt < self.config.retry_attempts - 1:
                     await asyncio.sleep(self.config.retry_delay)
                     continue
                 raise
-
             finally:
-                self.cleanup()  # Always cleanup socket after attempt!
+                self.cleanup()
 
     async def send_light_command(self, command: str) -> bool:
         """Send a light control command (on, off, or toggle) to the printer."""

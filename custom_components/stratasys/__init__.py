@@ -2,7 +2,6 @@
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN
 from .printer import PrinterConfig, StratasysMonitor
@@ -25,13 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     monitor = StratasysMonitor(config)
 
-    try:
-        # Only test the connection, don't fetch status here
-        await monitor.connect()
-    except Exception as ex:
-        raise ConfigEntryNotReady(f"Printer not ready: {ex}") from ex
-
-    coordinator = PrinterDataCoordinator(hass, entry, monitor, entry.options.get("scan_interval", 30))
+    coordinator = PrinterDataCoordinator(hass, entry, monitor, entry.options.get("scan_interval", entry.data.get("scan_interval", 30)))
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     # Initial fetch
@@ -39,13 +32,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "light", "switch"])
 
+    entry.async_on_unload(entry.add_update_listener(async_update_options))
+
     return True
+
+async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry so changed options take effect."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a Stratasys Printer config entry."""
-    coordinator: PrinterDataCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
-
-    # ✅ Properly cleanup socket
-    coordinator.monitor.cleanup()
-
-    return await hass.config_entries.async_forward_entry_unload(entry, ["sensor", "binary_sensor", "light", "switch"])
+    unloaded = await hass.config_entries.async_unload_platforms(
+        entry, ["sensor", "binary_sensor", "light", "switch"]
+    )
+    if unloaded:
+        coordinator: PrinterDataCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator.monitor.cleanup()
+    return unloaded

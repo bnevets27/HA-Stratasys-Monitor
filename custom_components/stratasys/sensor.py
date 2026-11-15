@@ -130,7 +130,7 @@ class StratasysBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success
+        return self.coordinator.last_update_success and bool((self.coordinator.data or {}).get("online", False))
 
     @property
     def device_info(self):
@@ -150,8 +150,12 @@ class OnlineStatusSensor(StratasysBaseSensor):
         super().__init__(coordinator, entry, "Printer Online Status", "mdi:lan-connect")
 
     @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
+
+    @property
     def native_value(self):
-        return "online" if self.available else "offline"
+        return "online" if (self.coordinator.data or {}).get("online", False) else "offline"
 
 
 class PrinterStatusSensor(StratasysBaseSensor):

@@ -2,11 +2,11 @@
 
 import logging
 from datetime import timedelta
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry  # <--- ADD THIS
 from .const import DOMAIN
-from .printer import StratasysMonitor
+from .printer import ConnectionError, StratasysMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,15 +18,27 @@ class PrinterDataCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             logger=_LOGGER,
+            config_entry=config_entry,
             name="Stratasys Printer Data",
             update_interval=timedelta(seconds=scan_interval),
         )
+        self._online_interval = timedelta(seconds=scan_interval)
         self.monitor = monitor
-        self.config_entry = config_entry  # <--- STORE the entry for device_info later!
+        self.config_entry = config_entry
 
     async def _async_update_data(self):
-        """Fetch latest data from the printer."""
+        """Fetch status, retaining an observable offline state and retrying slowly."""
         try:
-            return await self.monitor.get_status()
-        except Exception as ex:
-            raise Exception(f"Error updating printer data: {ex}")
+            data = await self.monitor.get_status()
+            if not isinstance(data, dict) or not any(
+                isinstance(data.get(section), dict) and data[section]
+                for section in ("general", "mariner", "currentJob")
+            ):
+                raise UpdateFailed("Printer returned empty or invalid status")
+        except (ConnectionError, OSError) as ex:
+            _LOGGER.debug("Printer status unavailable: %s", ex)
+            self.update_interval = timedelta(minutes=5)
+            return {"online": False}
+
+        self.update_interval = self._online_interval
+        return {**data, "online": True}

@@ -1,4 +1,4 @@
-# Stratasys 3D Printer — Home Assistant Integration
+﻿# Stratasys 3D Printer — Home Assistant Integration
 
 A Home Assistant custom integration that provides local, real-time monitoring and control of Stratasys FDM 3D printers. The integration communicates directly with the printer over your local network with no cloud dependency, exposing a comprehensive set of sensors, controls, and status entities.
 
